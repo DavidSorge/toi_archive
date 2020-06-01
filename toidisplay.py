@@ -185,7 +185,7 @@ def ask_whether_to_continue():
 
 # Import Data Index
 
-def load_metadata(archive_location):
+def load_metadata(archive_location='.'):
     print('Loading metadata...')
     with zipfile.ZipFile(os.path.join(archive_location, 'TOI_metadata.zip')) as zf:
         with zf.open('TOI_metadata.csv') as file:
