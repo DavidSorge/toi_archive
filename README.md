@@ -20,7 +20,11 @@ Arguments:
 
 
 ```
-display_requested_articles(display_list=None, linked_function=None, save_function=None, archive_location='.', chunk_size=15)
+display_requested_articles(display_list=None, 
+                           linked_function=None, 
+                           save_function=None, 
+                           archive_location='.', 
+                           chunk_size=15)
 ```
 
 Arguments:
