@@ -12,12 +12,11 @@ Arguments:
 
 * archive_location: dtype = string. When loading the TOI metadata in any other folder, pass the name of the main toi_archive folder as archive_location
 
+### load_metadata in action
+
 ![Screenshot of load_metadata in action](.images/load_metadata.png)
 
 ## Display articles, tag them, and save the list of tags
-
-![Screenshot of display_requested_articles in action](.images/display_requested_articles.png)
-
 
 ```
 display_requested_articles(display_list=None, 
@@ -38,3 +37,7 @@ Arguments:
 * archive_location: dtype = string. When displaying articles in a notebook in any other folder, pass the name of the main toi_archive folder as archive_location
 
 * chunk_size: dtype = int. The number of articles to display in each chunk. After every chunk, the save_function will be implemented, and the program will prompt to continue or quit.
+
+### display_requested_articles in action
+
+![Screenshot of display_requested_articles in action](.images/display_requested_articles.png)
