@@ -4,7 +4,7 @@ This is a container for the Times of India archive from ProQuest, with a utility
 
 The lookup utility is 'toidisplay.py'
 
-## Load TOI metadata in one line
+## load_metadata: load TOI metadata in one line
 
 ``` load_metadata(archive_location='.') ```
 
@@ -12,11 +12,11 @@ Arguments:
 
 * archive_location: dtype = string. When loading the TOI metadata in any other folder, pass the name of the main toi_archive folder as archive_location
 
-### load_metadata in action
+### load_metadata in action:
 
 ![Screenshot of load_metadata in action](.images/load_metadata.png)
 
-## Display articles, tag them, and save the list of tags
+## display_requested_articles: display articles, tag them, and save the tags to file
 
 ```
 display_requested_articles(display_list=None, 
