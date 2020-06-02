@@ -2,7 +2,7 @@
 
 This is a container for the Times of India archive from ProQuest, with a utility module to ease lookup of toi articles. The underlying data is not posted online for copyright reasons.
 
-The lookup utility is called toidisplay
+The lookup utility is 'toidisplay.py'
 
 ## Load TOI metadata in one line
 
