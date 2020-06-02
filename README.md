@@ -38,6 +38,6 @@ Arguments:
 
 * chunk_size: dtype = int. The number of articles to display in each chunk. After every chunk, the save_function will be implemented, and the program will prompt to continue or quit.
 
-### display_requested_articles in action
+### display_requested_articles in action:
 
 ![Screenshot of display_requested_articles in action](.images/display_requested_articles.png)
