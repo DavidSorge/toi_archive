@@ -1,6 +1,9 @@
 # toi_archive
 
-This is a container for the Times of India archive from ProQuest, with a utility module to ease lookup of toi articles. The underlying data is not posted online for copyright reasons.
+This is a container for the Times of India archive from ProQuest, with a utility module to make it easy to lookup toi articles. The underlying data is not posted online for copyright reasons.
+
+To make this utility functional, you'll need to place the TXT/, PDF/, and TOI_Metadata.zip files from the proquest archive in the toi_archive folder. The .gitignore file is set up to prevent uploads of these files.
+
 
 The lookup utility is 'toidisplay.py'
 
