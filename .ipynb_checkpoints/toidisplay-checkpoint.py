@@ -1,10 +1,11 @@
 # Imports
-import os, zipfile, pathlib, shutil
+import os, zipfile, pathlib, shutil, subprocess, zipp
 import pandas as pd
 import regex as re
 from IPython.display import clear_output
 from IPython.display import IFrame
-import zipp
+from urllib.parse import quote
+
 
 # Definitions
 
@@ -19,14 +20,14 @@ def empty(folder):
         except Exception as e:
             print('Failed to delete %s. Reason: %s' % (file_path, e))
 
-def sanitize(request_list):
+def sanitize(request_list, metadata):
     wanted_articles = []
     unrecognized_articles = []
     
     all_articles = set(metadata.index)
 
     for article in request_list:
-        clean_art = str(article).strip()
+        clean_art = int(str(article).strip())
         if clean_art in all_articles:
             wanted_articles.append(clean_art)
         elif clean_art == '':
@@ -47,7 +48,7 @@ def request_input():
     clear_output()
     return request_list
 
-def unpack_pdfs(archive_location, request_list):
+def unpack_pdfs(request_list):
     print("Unpacking requested pdfs...")
     
     global metadata
@@ -59,10 +60,10 @@ def unpack_pdfs(archive_location, request_list):
 
         files_to_extract = df[df['pdf_zip'] == zip_file].pdf_file.unique().tolist()   
 
-        with zipfile.ZipFile(os.path.join(archive_location, 'PDF', zip_file)) as zf: 
+        with zipfile.ZipFile(os.path.join(os.path.abspath(os.path.dirname(__file__)), 'PDF', zip_file)) as zf: 
 
             for file in files_to_extract:
-                zf.extract(file, path=os.path.join(archive_location, "temp"))
+                zf.extract(file, path=os.path.join(os.path.abspath(os.path.dirname(__file__)), "temp"))
     print("Done!")
 
 def display_article(article, linked_function):
@@ -70,28 +71,24 @@ def display_article(article, linked_function):
     global metadata
     
     pdf_file = metadata.at[article, 'pdf_file']
-    pdf_file = os.path.join("temp", pdf_file)
+    pdf_file = os.path.join(os.path.abspath(os.path.dirname(__file__)), "temp", pdf_file)
     
-    display(IFrame(src=pdf_file, width='100%', height='700px'))
+    rel_path = os.path.relpath(pdf_file)
+    
+    display(IFrame(src=rel_path, width='100%', height='700px'))
+    
+
     
     pub_date = metadata.at[article, 'pub_date']
     objecttypes = metadata.at[article, 'objecttypes']
     objecttypes = objecttypes.split(';')
     
-    txt_zip = metadata.at[article, 'txt_zip']
-    txt_file = metadata.at[article, 'txt_file']
+    try:
+        print(f'Article ID: {article} \t Published: {pub_date}')
+        print('Object Types:\t', ', '.join(objecttypes))
+    except:
+        pass
     
-    txt_zip = os.path.join('TXT', txt_zip)
-    
-    with zipfile.ZipFile(txt_zip) as zf:
-        with zf.open(txt_file) as f:
-            text = f.read()
-    
-    print(f'Article ID: {article} \t Published: {pub_date}')
-    print('Object Types:\t', ', '.join(objecttypes))
-    
-    
-#     print('Article text:', '\n\n', text, '\n')
     if callable(linked_function):
         linked_function(article)
     elif linked_function == None:
@@ -117,6 +114,7 @@ def save_results(save_function):
         print('changes saved!')
     else:
         print('no save function detected; changes not saved.')
+        pass
     
 
 
@@ -140,10 +138,13 @@ def display_article_chunk(request_list, chunk_number, chunk_size, linked_functio
         
     save_results(save_function)
     
-def display_requested_articles(display_list=None, linked_function=None, save_function=None, archive_location='.', chunk_size=15):
-    if 'metadata' not in globals():
-        global metadata
-        metadata = load_metadata(archive_location)
+def display_requested_articles(display_list=None, linked_function=None, save_function=None, chunk_size=15, preloaded_metadata=None):
+    if type(preloaded_metadata) != pd.core.frame.DataFrame:
+        if 'metadata' not in globals():
+            global metadata
+            metadata = load_metadata()
+    else:
+        metadata = preloaded_metadata
         
     if display_list == None:
         request_list = request_input()
@@ -155,9 +156,9 @@ def display_requested_articles(display_list=None, linked_function=None, save_fun
     if type(request_list) != list:
         raise TypeError('Please make sure display_list is either a list of IDs or a function returning a list of article IDs.')
     
-    request_list = sanitize(request_list)
+    request_list = sanitize(request_list, metadata)
     
-    unpack_pdfs(archive_location, request_list)
+    unpack_pdfs(request_list)
     
     number_of_chunks = len(request_list)//chunk_size + (len(request_list) % chunk_size > 0)
     
@@ -175,7 +176,7 @@ def display_requested_articles(display_list=None, linked_function=None, save_fun
         elif int(continue_indicator) == 0:
             pass
                
-    empty(os.path.join(archive_location, "temp"))
+    empty(os.path.join(os.path.abspath(os.path.dirname(__file__)), "temp"))
 
 def ask_whether_to_continue():
     continue_indicator = input('Enter 1 to continue, or 0 to exit:')
@@ -185,17 +186,65 @@ def ask_whether_to_continue():
 
 # Import Data Index
 
-def load_metadata(archive_location='.'):
+def load_metadata():
     print('Loading metadata...')
-    with zipfile.ZipFile(os.path.join(archive_location, 'TOI_metadata.zip')) as zf:
+    with zipfile.ZipFile(os.path.join(os.path.abspath(os.path.dirname(__file__)), 'TOI_metadata.zip')) as zf:
         with zf.open('TOI_metadata.csv') as file:
-            metadata = pd.read_csv(file, usecols=['record_id', 
-                                                  'pub_date', 
-                                                  'txt_zip', 
-                                                  'txt_file',
-                                                  'pdf_zip',
-                                                  'pdf_file',
-                                                  'objecttypes'], dtype='object').set_index('record_id')
-
+            metadata = pd.read_csv(file, index_col='record_id', dtype='object')
+    metadata['pub_date'] = pd.to_datetime(metadata.pub_date)
     print('done \n')
     return metadata
+
+def read_text(zipfile_object,fn):
+    with zipfile_object.open(fn) as txt:
+        txt_string = txt.read()
+    txt_string = txt_string.decode()
+    return(txt_string)
+
+def punctuate(text):
+    
+    """
+    This function makes use of Ottokar Tilk's Punctuator2,
+    online at <https://github.com/ottokart/punctuator2>, and
+    described in 
+    @inproceedings{tilk2016,
+                  author    = {Ottokar Tilk and Tanel Alum{\"a}e},
+                  title     = {Bidirectional Recurrent Neural Network with Attention Mechanism for Punctuation Restoration},
+                  booktitle = {Interspeech 2016},
+                  year      = {2016}
+                  }
+    """
+    
+    proc = subprocess.Popen(["curl", "-d", f"text={quote(text)}", "http://bark.phon.ioc.ee/punctuator"], stdout=subprocess.PIPE)
+    (out, err) = proc.communicate()
+    return out.decode("utf-8")
+
+def get_text_df(request_list, preloaded_metadata=None):
+    if type(preloaded_metadata) != pd.core.frame.DataFrame:
+        if 'metadata' not in globals():
+            global metadata
+            metadata = load_metadata()
+    else:
+        metadata = preloaded_metadata
+
+    print("Reading in article contents")
+    
+    if type(request_list) != list:
+        raise TypeError('Please make sure display_list is either a list of IDs.')
+    
+    request_list = sanitize(request_list, metadata)
+    
+    working_set = metadata.loc[request_list]
+    
+    article_texts = pd.Series(dtype='object')
+    
+    for zip_file in working_set.txt_zip.unique():
+        path = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'TXT', zip_file)
+        files = working_set[working_set.txt_zip == zip_file]
+        with zipfile.ZipFile(path) as z:
+            text_series = files.txt_file.apply(lambda x: read_text(z,x))
+            article_texts = article_texts.append(text_series)
+            
+    clear_output
+    
+    return pd.DataFrame({"article_text":article_texts})
