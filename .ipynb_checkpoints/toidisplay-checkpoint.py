@@ -2,6 +2,7 @@
 import os, zipfile, pathlib, shutil, subprocess, zipp
 import pandas as pd
 import regex as re
+from tqdm.notebook import tqdm
 from IPython.display import clear_output
 from IPython.display import IFrame
 from urllib.parse import quote
@@ -10,6 +11,9 @@ from urllib.parse import quote
 # Definitions
 
 def empty(folder):
+    """
+    Deletes all files, directories, or links in a folder.
+    """
     for filename in os.listdir(folder):
         file_path = os.path.join(folder, filename)
         try:
@@ -21,6 +25,12 @@ def empty(folder):
             print('Failed to delete %s. Reason: %s' % (file_path, e))
 
 def sanitize(request_list, metadata):
+    """
+    Takes a raw-text input, returns all members of the list that are
+    valid TOI article ids as a list, and prints a notification of any
+    members of the list not so recognized.
+    """
+    
     wanted_articles = []
     unrecognized_articles = []
     
@@ -42,9 +52,17 @@ def sanitize(request_list, metadata):
         raise ValueError('No valid article IDs Recognized!')
     return(wanted_articles)
 
+def input_list(request):
+    lookup_list = input(request)
+    lookup_list = re.sub(r'[,;](*SKIP)(*FAIL)|\W', '', lookup_list)
+    return re.split(r',\s*|;\s*|\s+', lookup_list)
+
 def request_input():
-    request = input("What article IDs shall I look up for you?")
-    request_list = re.split(",|;| ", request)
+    """
+    Requests a list of article IDs to display, and returns a split list.
+    """
+    
+    request_list = input_list("What article IDs shall I look up for you?")
     clear_output()
     return request_list
 
@@ -67,7 +85,9 @@ def unpack_pdfs(request_list):
     print("Done!")
 
 def display_article(article, linked_function):
-    
+    """
+    Displays the pdf version of a requested article in a notebook's IFrame
+    """
     global metadata
     
     pdf_file = metadata.at[article, 'pdf_file']
@@ -102,6 +122,10 @@ def display_article(article, linked_function):
 # Next step is to introduce the choice to save and end or save and continue.
 
 def save_results(save_function):
+    """
+    If a separate save function has been defined, calls that save function.
+    If not, prints a message alerting that no changes have been saved.
+    """
     if callable(save_function):
         save_function()
         save_indicator = 1
@@ -113,7 +137,7 @@ def save_results(save_function):
     if save_indicator == 1:
         print('changes saved!')
     else:
-        print('no save function detected; changes not saved.')
+        print('no save function defined; no changes saved.')
         pass
     
 
@@ -188,10 +212,16 @@ def ask_whether_to_continue():
 
 def load_metadata():
     print('Loading metadata...')
+    df_list = []
     with zipfile.ZipFile(os.path.join(os.path.abspath(os.path.dirname(__file__)), 'TOI_metadata.zip')) as zf:
         with zf.open('TOI_metadata.csv') as file:
-            metadata = pd.read_csv(file, index_col='record_id', dtype='object')
+            for df_chunk in tqdm(pd.read_csv(file, index_col='record_id', dtype='object', engine='c', chunksize=7240),
+                                 total=1000):
+                df_list.append(df_chunk)
+    metadata = pd.concat(df_list)
+#             metadata = pd.read_csv(file, index_col='record_id', dtype='object', engine='c')
     metadata['pub_date'] = pd.to_datetime(metadata.pub_date)
+    clear_output
     print('done \n')
     return metadata
 
@@ -248,3 +278,113 @@ def get_text_df(request_list, preloaded_metadata=None):
     clear_output
     
     return pd.DataFrame({"article_text":article_texts})
+
+def drop_by_objecttype(metadata):
+    print('Filtering out non-news articles by type')
+    before = len(metadata)
+
+    # Drop based on object type
+
+    unwanted = ["classified advertisement;advertisement",
+                "advertisement",
+                "credit/acknowledgement",
+                "letter to the editor;correspondence",
+                "stock quote",
+                "image/photograph",
+                "illustration",
+                "obituary",
+                "review",
+                "birth notice",
+                "news;marriage announcement",
+                "table of contents;front matter",
+                "editorial cartoon/comic",
+                "advertisement;classified advertisement",
+                "front matter;table of contents",
+                "correspondence;letter to the editor",
+                "news;legal notice",
+                "undefined",
+                "marriage announcement;news"]
+
+    wanted = ['feature;article',
+              'news',
+              'editorial;commentary',
+              'news;military/war news',
+              'general information',
+              'front page/cover story',
+              'article;feature',
+              'commentary;editorial',
+              'military/war news;news']
+    # (This is the complement of the "unwanted" set; for confirmation, 
+    # uncomment and run the following 2 lines:
+
+    # print(set(metadata[metadata.objecttypes.isin(wanted)].record_id.tolist()) == 
+    #       set(metadata[~metadata.objecttypes.isin(unwanted)].record_id.tolist()))
+
+    metadata = metadata[~metadata.objecttypes.isin(unwanted)]
+
+    trimmed = before - len(metadata)
+    print(f"{trimmed:n} records trimmed. {len(metadata):n} records remain.")
+    
+    return metadata
+
+def drop_by_note(metadata):
+    print('Filtering out articles with no text')
+    before = len(metadata)
+
+    # Drop if article has no text ('note' is either null, or contains 'No text')
+    metadata = metadata[metadata.note.isnull()]
+
+    trimmed = before - len(metadata)
+    print(f"{trimmed:n} records trimmed. {len(metadata):n} records remain.")
+    
+    return metadata
+
+def drop_by_title(metadata):
+    print('Filtering out non-news documents identifiable by title')
+
+    before = len(metadata)
+
+    # Drop based on title
+    unwanted_titles = ['weather', 
+                       'current_topics', 
+                       'city_lights', 
+                       'radio.txt', 
+                       'telefilm',
+                       'engagements', 
+                       'greetings', 
+                       'television.txt', 
+                       'acknowledgement.txt']
+
+    unwanted_titles = '|'.join(unwanted_titles)
+
+    metadata = metadata[~metadata.txt_file.str.contains(unwanted_titles)]
+
+    trimmed = before - len(metadata)
+    print(f"{trimmed:n} records trimmed. {len(metadata):n} records remain.")
+    return(metadata)
+
+def filter_non_news_articles(metadata):
+    metadata = drop_by_objecttype(metadata)
+    metadata = drop_by_note(metadata)
+    metadata = drop_by_title(metadata)
+    return metadata
+
+def get_punctuated_text_df(article_list, metadata, save_as):
+    """
+    For a list of articles, creates a dataframe containing the article id, text, 
+    and punctuated text. Saves this dataframe as a CSV file.
+    """
+    if os.path.exists(save_as):
+        texts = pd.read_csv(save_as, index_col=0)
+    else:
+        # Reading in article texts:
+        texts = get_text_df(article_list, metadata)
+
+        # Punctuating the article texts:
+        texts['punctuated_text'] = texts.article_text.progress_apply(punctuate)
+
+        # Saving, because this is really time-consuming
+        texts.to_csv(save_as)
+    return texts
+
+
