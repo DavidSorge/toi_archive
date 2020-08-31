@@ -7,34 +7,49 @@ from IPython.display import clear_output
 from IPython.display import IFrame
 from urllib.parse import quote
 
-
 # Definitions
 
-def empty(folder):
+def get_display_list(request_list, output_csv='article_output.csv'):
     """
-    Deletes all files, directories, or links in a folder.
+    This function takes an input csv, 
+    an output csv, and outputs a list of articles 
+    in the input list but not in the output list
     """
-    for filename in os.listdir(folder):
-        file_path = os.path.join(folder, filename)
-        try:
-            if os.path.isfile(file_path) or os.path.islink(file_path):
-                os.unlink(file_path)
-            elif os.path.isdir(file_path):
-                shutil.rmtree(file_path)
-        except Exception as e:
-            print('Failed to delete %s. Reason: %s' % (file_path, e))
+    if os.path.exists(output_csv):
+        completed_articles = list(pd.read_csv(output_csv,index_col=0).index)
+    else:
+        completed_articles = []
+  
+    # read in the categorization done so far
+    request_list = list(set(request_list) - set(completed_articles))
+    
+    return request_list
 
-def sanitize(request_list, metadata):
+def input_list(request):
+    lookup_list = input(request)
+    lookup_list = re.sub(r'[,;](*SKIP)(*FAIL)|\W', '', lookup_list)
+    return re.split(r',\s*|;\s*|\s+', lookup_list)
+
+def request_input():
+    """
+    Requests a list of article IDs to display, and returns a split list.
+    """
+    
+    request_list = input_list("What article IDs shall I look up for you?")
+    clear_output()
+    return request_list
+
+def sanitize(request_list):
     """
     Takes a raw-text input, returns all members of the list that are
     valid TOI article ids as a list, and prints a notification of any
     members of the list not so recognized.
     """
-    
+    TOI_METADATA = load_metadata()
     wanted_articles = []
     unrecognized_articles = []
     
-    all_articles = set(metadata.index)
+    all_articles = set(TOI_METADATA.index)
 
     for article in request_list:
         clean_art = int(str(article).strip())
@@ -52,26 +67,12 @@ def sanitize(request_list, metadata):
         raise ValueError('No valid article IDs Recognized!')
     return(wanted_articles)
 
-def input_list(request):
-    lookup_list = input(request)
-    lookup_list = re.sub(r'[,;](*SKIP)(*FAIL)|\W', '', lookup_list)
-    return re.split(r',\s*|;\s*|\s+', lookup_list)
-
-def request_input():
-    """
-    Requests a list of article IDs to display, and returns a split list.
-    """
-    
-    request_list = input_list("What article IDs shall I look up for you?")
-    clear_output()
-    return request_list
-
 def unpack_pdfs(request_list):
     print("Unpacking requested pdfs...")
     
-    global metadata
+    global TOI_METADATA
     
-    df = metadata.loc[request_list]
+    df = TOI_METADATA.loc[request_list]
     zips_to_open = df.pdf_zip.unique().tolist()
 
     for zip_file in zips_to_open:
@@ -88,9 +89,9 @@ def display_article(article, linked_function):
     """
     Displays the pdf version of a requested article in a notebook's IFrame
     """
-    global metadata
+    global TOI_METADATA
     
-    pdf_file = metadata.at[article, 'pdf_file']
+    pdf_file = TOI_METADATA.at[article, 'pdf_file']
     pdf_file = os.path.join(os.path.abspath(os.path.dirname(__file__)), "temp", pdf_file)
     
     rel_path = os.path.relpath(pdf_file)
@@ -99,8 +100,8 @@ def display_article(article, linked_function):
     
 
     
-    pub_date = metadata.at[article, 'pub_date']
-    objecttypes = metadata.at[article, 'objecttypes']
+    pub_date = TOI_METADATA.at[article, 'pub_date']
+    objecttypes = TOI_METADATA.at[article, 'objecttypes']
     objecttypes = objecttypes.split(';')
     
     try:
@@ -110,41 +111,31 @@ def display_article(article, linked_function):
         pass
     
     if callable(linked_function):
-        linked_function(article)
+        feedback = linked_function(article)
     elif linked_function == None:
-        foo = input("Press enter to display next article.")
+        feedback = input("Press enter to display next article.")
     else:
         raise TypeError('linked_function is not a valid function.')
         
-    
     clear_output()
+    
+    return feedback
     
 # Next step is to introduce the choice to save and end or save and continue.
 
-def save_results(save_function):
+def save_results(output_dict, save_location=None):
     """
     If a separate save function has been defined, calls that save function.
     If not, prints a message alerting that no changes have been saved.
     """
-    if callable(save_function):
-        save_function()
-        save_indicator = 1
-    elif save_function == None:
-        save_indicator = 0
-    else:
-        raise TypeError("save_function is not a valid function")
-    
-    if save_indicator == 1:
-        print('changes saved!')
-    else:
-        print('no save function defined; no changes saved.')
-        pass
-    
+    if save_location != None:
+        df = pd.DataFrame(output_dict.values, index=output_dict.keys)
+        df.to_csv(save_location)
+        print("Progress saved.")
 
-
-def display_article_chunk(request_list, chunk_number, chunk_size, linked_function, save_function):
-    global metadata
-       
+def display_article_chunk(request_list, chunk_number, chunk_size, linked_function, output_dict, save_location=None):
+    global TOI_METADATA
+    
     number_of_chunks = len(request_list)//chunk_size + (len(request_list) % chunk_size > 0)
     
     n = 0
@@ -154,22 +145,22 @@ def display_article_chunk(request_list, chunk_number, chunk_size, linked_functio
         this_chunk = request_list[chunk_size*chunk_number:chunk_size*(chunk_number+1)]
     else:
         this_chunk = request_list[chunk_size*chunk_number:]
-
+        
+    
     for article in this_chunk:
         n+=1
         print(f"Here's article {n} of {len(this_chunk)}, in set {chunk_number+1} of {number_of_chunks}:")
-        display_article(article, linked_function)
+        feedback = display_article(article, linked_function)
+        output_dict.update({article:feedback})
         
-    save_results(save_function)
+    save_results(output_dict, save_location)
     
-def display_requested_articles(display_list=None, linked_function=None, save_function=None, chunk_size=15, preloaded_metadata=None):
-    if type(preloaded_metadata) != pd.core.frame.DataFrame:
-        if 'metadata' not in globals():
-            global metadata
-            metadata = load_metadata()
-    else:
-        metadata = preloaded_metadata
-        
+    return output_dict
+    
+def display_requested_articles(display_list=None, linked_function=None, chunk_size=15, append_mode=True, save_location='article_output.csv'):
+
+    TOI_METADATA = load_metadata()
+
     if display_list == None:
         request_list = request_input()
     elif callable(display_list):
@@ -180,7 +171,11 @@ def display_requested_articles(display_list=None, linked_function=None, save_fun
     if type(request_list) != list:
         raise TypeError('Please make sure display_list is either a list of IDs or a function returning a list of article IDs.')
     
-    request_list = sanitize(request_list, metadata)
+    if append_mode == True:
+        request_list = sanitize(get_display_list(request_list, output_csv=save_location))
+    else:
+        request_list = sanitize(request_list)
+    
     
     unpack_pdfs(request_list)
     
@@ -190,9 +185,11 @@ def display_requested_articles(display_list=None, linked_function=None, save_fun
     
     continue_indicator = 1
     
+    output_dict = {}
+    
     for chunk_number in range(number_of_chunks):
         if int(continue_indicator) == 1:
-            display_article_chunk(request_list, chunk_number, chunk_size, linked_function, save_function)
+            output_dict = display_article_chunk(request_list, chunk_number, chunk_size, linked_function, output_dict, save_location=None)
             if chunk_number + 1 != number_of_chunks:
                 continue_indicator = ask_whether_to_continue()
             if chunk_number + 1 == number_of_chunks:
@@ -211,19 +208,27 @@ def ask_whether_to_continue():
 # Import Data Index
 
 def load_metadata():
-    print('Loading metadata...')
-    df_list = []
-    with zipfile.ZipFile(os.path.join(os.path.abspath(os.path.dirname(__file__)), 'TOI_metadata.zip')) as zf:
-        with zf.open('TOI_metadata.csv') as file:
-            for df_chunk in tqdm(pd.read_csv(file, index_col='record_id', dtype='object', engine='c', chunksize=7240),
-                                 total=1000):
-                df_list.append(df_chunk)
-    metadata = pd.concat(df_list)
-#             metadata = pd.read_csv(file, index_col='record_id', dtype='object', engine='c')
-    metadata['pub_date'] = pd.to_datetime(metadata.pub_date)
-    clear_output
-    print('done \n')
-    return metadata
+    if 'TOI_METADATA' not in globals():
+        global TOI_METADATA 
+    
+    
+        print('Loading TOI metadata...')
+        df_list = []
+        with zipfile.ZipFile(os.path.join(os.path.abspath(os.path.dirname(__file__)), 'TOI_metadata.zip')) as zf:
+            with zf.open('TOI_metadata.csv') as file:
+                for df_chunk in tqdm(pd.read_csv(file, 
+                                                 index_col='record_id', 
+                                                 dtype='object', 
+                                                 engine='c',
+                                                 chunksize=7240),
+                                     total=1000):
+                    df_list.append(df_chunk)
+        TOI_METADATA = pd.concat(df_list)
+        TOI_METADATA['pub_date'] = pd.to_datetime(TOI_METADATA.pub_date)
+        clear_output
+        print('done \n')
+    
+    return TOI_METADATA
 
 def read_text(zipfile_object,fn):
     with zipfile_object.open(fn) as txt:
@@ -249,26 +254,21 @@ def punctuate(text):
     (out, err) = proc.communicate()
     return out.decode("utf-8")
 
-def get_text_df(request_list, preloaded_metadata=None):
-    if type(preloaded_metadata) != pd.core.frame.DataFrame:
-        if 'metadata' not in globals():
-            global metadata
-            metadata = load_metadata()
-    else:
-        metadata = preloaded_metadata
+def get_text_df(request_list):
+    TOI_METADATA = load_metadata()
 
     print("Reading in article contents")
     
     if type(request_list) != list:
-        raise TypeError('Please make sure display_list is either a list of IDs.')
+        raise TypeError('Please make sure display_list is a list of IDs.')
     
-    request_list = sanitize(request_list, metadata)
+    request_list = sanitize(request_list)
     
-    working_set = metadata.loc[request_list]
+    working_set = TOI_METADATA.loc[request_list]
     
     article_texts = pd.Series(dtype='object')
     
-    for zip_file in working_set.txt_zip.unique():
+    for zip_file in tqdm(working_set.txt_zip.unique()):
         path = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'TXT', zip_file)
         files = working_set[working_set.txt_zip == zip_file]
         with zipfile.ZipFile(path) as z:
@@ -369,22 +369,51 @@ def filter_non_news_articles(metadata):
     metadata = drop_by_title(metadata)
     return metadata
 
-def get_punctuated_text_df(article_list, metadata, save_as):
+def get_punctuated_text_df(article_list, save_as):
     """
     For a list of articles, creates a dataframe containing the article id, text, 
     and punctuated text. Saves this dataframe as a CSV file.
     """
+    
     if os.path.exists(save_as):
+        
+        print('Loading text dataframe...')
         texts = pd.read_csv(save_as, index_col=0)
+        clear_output
+        
+        print('Done!')
+        return texts
+    
     else:
+        
         # Reading in article texts:
-        texts = get_text_df(article_list, metadata)
+        print("Reading in article text...")
+        texts = get_text_df(article_list)
+        clear_output()
 
         # Punctuating the article texts:
+        print("Inferring text punctuation...")
         texts['punctuated_text'] = texts.article_text.progress_apply(punctuate)
+        clear_output()
 
         # Saving, because this is really time-consuming
+        print("Saving texts...")
         texts.to_csv(save_as)
-    return texts
+        clear_output()
 
+        print('Done!')
+        return texts
 
+def empty(folder):
+    """
+    Deletes all files, directories, or links in a folder.
+    """
+    for filename in os.listdir(folder):
+        file_path = os.path.join(folder, filename)
+        try:
+            if os.path.isfile(file_path) or os.path.islink(file_path):
+                os.unlink(file_path)
+            elif os.path.isdir(file_path):
+                shutil.rmtree(file_path)
+            except Exception as e:
+                print('Failed to delete %s. Reason: %s' % (file_path, e))
