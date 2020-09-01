@@ -73,10 +73,10 @@ def unpack_pdfs(request_list):
     global TOI_METADATA
     
     df = TOI_METADATA.loc[request_list]
-    zips_to_open = df.pdf_zip.unique().tolist()
+    zips_to_open = df[df.pdf_zip.notnull()].pdf_zip.unique().tolist()
 
     for zip_file in zips_to_open:
-
+        
         files_to_extract = df[df['pdf_zip'] == zip_file].pdf_file.unique().tolist()   
 
         with zipfile.ZipFile(os.path.join(os.path.abspath(os.path.dirname(__file__)), 'PDF', zip_file)) as zf: 
@@ -91,13 +91,22 @@ def display_article(article, linked_function):
     """
     global TOI_METADATA
     
-    pdf_file = TOI_METADATA.at[article, 'pdf_file']
-    pdf_file = os.path.join(os.path.abspath(os.path.dirname(__file__)), "temp", pdf_file)
+    if type(TOI_METADATA.at[article, 'pdf_file']) == str:
+
+        pdf_file = TOI_METADATA.at[article, 'pdf_file']
+        pdf_file = os.path.join(os.path.abspath(os.path.dirname(__file__)), "temp", pdf_file)
+
+        rel_path = os.path.relpath(pdf_file)
+
+        display(IFrame(src=rel_path, width='100%', height='700px'))
     
-    rel_path = os.path.relpath(pdf_file)
-    
-    display(IFrame(src=rel_path, width='100%', height='700px'))
-    
+    else:
+        print("No pdf file found in archive, displaying txt instead:")
+        ziparchive = TOI_METADATA.at[article, 'txt_zip']
+        txt_file = TOI_METADATA.at[article, 'txt_file']
+        with zipfile.ZipFile(os.path.join(os.path.abspath(os.path.dirname(__file__)), 'TXT', ziparchive)) as zf:
+            text = zf.read(txt_file)
+        print(text)
 
     
     pub_date = TOI_METADATA.at[article, 'pub_date']
@@ -175,7 +184,6 @@ def display_requested_articles(display_list=None, linked_function=None, chunk_si
         request_list = sanitize(get_display_list(request_list, output_csv=save_location))
     else:
         request_list = sanitize(request_list)
-    
     
     unpack_pdfs(request_list)
     
@@ -415,5 +423,5 @@ def empty(folder):
                 os.unlink(file_path)
             elif os.path.isdir(file_path):
                 shutil.rmtree(file_path)
-            except Exception as e:
-                print('Failed to delete %s. Reason: %s' % (file_path, e))
+        except Exception as e:
+            print('Failed to delete %s. Reason: %s' % (file_path, e))
