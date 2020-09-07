@@ -2,10 +2,27 @@
 import os, zipfile, pathlib, shutil, subprocess, zipp
 import pandas as pd
 import regex as re
-from tqdm.notebook import tqdm
 from IPython.display import clear_output
 from IPython.display import IFrame
 from urllib.parse import quote
+
+# tqdm import
+def isnotebook():
+    try:
+        shell = get_ipython().__class__.__name__
+        if shell == 'ZMQInteractiveShell':
+            return True   # Jupyter notebook or qtconsole
+        elif shell == 'TerminalInteractiveShell':
+            return False  # Terminal running IPython
+        else:
+            return False  # Other type (?)
+    except NameError:
+        return False      # Probably standard Python interpreter
+
+if isnotebook():
+    from tqdm.notebook import tqdm
+else:
+    from tqdm import tqdm 
 
 # Definitions
 
@@ -85,7 +102,7 @@ def unpack_pdfs(request_list):
                 zf.extract(file, path=os.path.join(os.path.abspath(os.path.dirname(__file__)), "temp"))
     print("Done!")
 
-def display_article(article, linked_function):
+def display_article(article, input_function):
     """
     Displays the pdf version of a requested article in a notebook's IFrame
     """
@@ -119,18 +136,30 @@ def display_article(article, linked_function):
     except:
         pass
     
-    if callable(linked_function):
-        feedback = linked_function(article)
-    elif linked_function == None:
+    if callable(input_function):
+        feedback = input_function(article)
+    elif input_function == None:
         feedback = input("Press enter to display next article.")
     else:
-        raise TypeError('linked_function is not a valid function.')
+        raise TypeError('input_function is not a valid function.')
         
     clear_output()
     
     return feedback
     
-# Next step is to introduce the choice to save and end or save and continue.
+def binary_categorize(article, prompt='Does this article fit the category?'):
+    
+    category_judgment = ''
+    while type(category_judgment) != bool:
+        category_judgment = input(f"{prompt}\n(y or 1 = Yes, n or 0 = No)")
+        if category_judgment == 'y' or category_judgment == '1':
+            category_judgment = True
+        elif category_judgment == 'n' or category_judgment == '0':
+            category_judgment = False
+        else:
+            print("I'm not sure how to interpret that.")
+    
+    return category_judgment
 
 def save_results(output_dict, save_location=None):
     """
@@ -142,7 +171,7 @@ def save_results(output_dict, save_location=None):
         df.to_csv(save_location)
         print("Progress saved.")
 
-def display_article_chunk(request_list, chunk_number, chunk_size, linked_function, output_dict, save_location=None):
+def display_article_chunk(request_list, chunk_number, chunk_size, input_function, output_dict, save_location=None):
     global TOI_METADATA
     
     number_of_chunks = len(request_list)//chunk_size + (len(request_list) % chunk_size > 0)
@@ -159,14 +188,14 @@ def display_article_chunk(request_list, chunk_number, chunk_size, linked_functio
     for article in this_chunk:
         n+=1
         print(f"Here's article {n} of {len(this_chunk)}, in set {chunk_number+1} of {number_of_chunks}:")
-        feedback = display_article(article, linked_function)
+        feedback = display_article(article, input_function)
         output_dict.update({article:feedback})
         
     save_results(output_dict, save_location)
     
     return output_dict
     
-def display_requested_articles(display_list=None, linked_function=None, chunk_size=15, append_mode=True, save_location='article_output.csv'):
+def display_requested_articles(display_list=None, input_function=None, chunk_size=15, append_mode=True, save_location='article_output.csv'):
 
     TOI_METADATA = load_metadata()
 
@@ -197,7 +226,7 @@ def display_requested_articles(display_list=None, linked_function=None, chunk_si
     
     for chunk_number in range(number_of_chunks):
         if int(continue_indicator) == 1:
-            output_dict = display_article_chunk(request_list, chunk_number, chunk_size, linked_function, output_dict, save_location=None)
+            output_dict = display_article_chunk(request_list, chunk_number, chunk_size, input_function, output_dict, save_location=None)
             if chunk_number + 1 != number_of_chunks:
                 continue_indicator = ask_whether_to_continue()
             if chunk_number + 1 == number_of_chunks:
