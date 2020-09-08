@@ -167,23 +167,27 @@ def binary_categorize(article):
     
     return category_judgment
 
-def save_results(output_dict, save_location=None):
+def save_results(output_dict, save_location):
     """
-    If a separate save function has been defined, calls that save function.
-    If not, prints a message alerting that no changes have been saved.
+    Saves a CSV with article index and a copy of user input.
     """
-    if save_location != None:
-        df = pd.DataFrame(output_dict.values, index=output_dict.keys)
-        df.to_csv(save_location)
-        print("Progress saved.")
+    if os.path.exists(save_location):
+        old = pd.read_csv(save_location, index_col=0)
+        new = pd.DataFrame.from_dict(output_dict, orient='index', columns=['human_input'])
+        df = old.append(new)
+    else:
+        df = pd.DataFrame.from_dict(output_dict, orient='index', columns=['human_input'])
 
-def display_article_chunk(request_list, chunk_number, chunk_size, input_function, output_dict, save_location=None):
+    df.to_csv(save_location)
+
+    print("Progress saved.")
+
+def display_article_chunk(request_list, chunk_number, chunk_size, input_function, output_dict, save_location):
     global TOI_METADATA
     
     number_of_chunks = len(request_list)//chunk_size + (len(request_list) % chunk_size > 0)
     
     n = 0
-    save_indicator = 0
 
     if len(request_list) >= chunk_size*chunk_number+1:
         this_chunk = request_list[chunk_size*chunk_number:chunk_size*(chunk_number+1)]
@@ -202,6 +206,7 @@ def display_article_chunk(request_list, chunk_number, chunk_size, input_function
     return output_dict
     
 def display_requested_articles(display_list=None, input_function=None, chunk_size=15, append_mode=True, save_location='article_output.csv'):
+    global TOI_METADATA
 
     TOI_METADATA = load_metadata()
 
@@ -232,7 +237,7 @@ def display_requested_articles(display_list=None, input_function=None, chunk_siz
     
     for chunk_number in range(number_of_chunks):
         if int(continue_indicator) == 1:
-            output_dict = display_article_chunk(request_list, chunk_number, chunk_size, input_function, output_dict, save_location=None)
+            output_dict = display_article_chunk(request_list, chunk_number, chunk_size, input_function, output_dict, save_location)
             if chunk_number + 1 != number_of_chunks:
                 continue_indicator = ask_whether_to_continue()
             if chunk_number + 1 == number_of_chunks:
@@ -294,7 +299,7 @@ def punctuate(text):
     """
     
     proc = subprocess.Popen(["curl", "-d", f"text={quote(text)}", "http://bark.phon.ioc.ee/punctuator"], stdout=subprocess.PIPE)
-    (out, err) = proc.communicate()
+    out = proc.communicate()[0]
     return out.decode("utf-8")
 
 def get_text_df(request_list):
