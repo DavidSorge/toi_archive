@@ -1,12 +1,13 @@
 # Imports
-import os, zipfile, pathlib, shutil, subprocess, zipp
+import os
+import zipfile 
+import pathlib 
+import shutil 
+import subprocess
 import pandas as pd
 import regex as re
-from IPython.display import clear_output
-from IPython.display import IFrame
+from IPython.display import clear_output, IFrame
 from urllib.parse import quote
-from wand.image import Image as Wimage
-from PyPDF2 import PdfFileReader
 
 # tqdm import
 def isnotebook():
@@ -55,7 +56,6 @@ def request_input():
     """
     
     request_list = input_list("What article IDs shall I look up for you?")
-    clear_output()
     return request_list
 
 def sanitize(request_list):
@@ -83,7 +83,7 @@ def sanitize(request_list):
         print("The following entries were not recognized as articles:")
         [print(repr(x)) for x in unrecognized_articles]
     if len(wanted_articles) == 0:
-        raise ValueError('No valid article IDs Recognized!')
+        print('No valid article IDs Recognized!')
     return(wanted_articles)
 
 def unpack_pdfs(request_list):
@@ -116,12 +116,8 @@ def display_article(article, input_function):
         pdf_file = os.path.join(os.path.abspath(os.path.dirname(__file__)), "temp", pdf_file)
 
         rel_path = os.path.relpath(pdf_file)
-        with open(rel_path, 'rb') as f:
-            number_of_pages = PdfFileReader(f).getNumPages()
-        for page in range(number_of_pages):
-            img = Wimage(filename=rel_path+f'[{page}]', resolution=150)
-            display(img)
-            # display(IFrame(src=rel_path, width='100%', height='700px'))
+        
+        display(IFrame(src=rel_path, width='100%', height='700px'))
     
     else:
         print("No pdf file found in archive, displaying txt instead:")
@@ -225,6 +221,9 @@ def display_requested_articles(display_list=None, input_function=None, chunk_siz
     else:
         request_list = sanitize(request_list)
     
+    if len(request_list) == 0:
+        return
+
     unpack_pdfs(request_list)
     
     number_of_chunks = len(request_list)//chunk_size + (len(request_list) % chunk_size > 0)
@@ -323,7 +322,7 @@ def get_text_df(request_list):
             text_series = files.txt_file.apply(lambda x: read_text(z,x))
             article_texts = article_texts.append(text_series)
             
-    clear_output
+    print('Done')
     
     return pd.DataFrame({"article_text":article_texts})
 
@@ -426,9 +425,7 @@ def get_punctuated_text_df(article_list, save_as):
     if os.path.exists(save_as):
         
         print('Loading text dataframe...')
-        texts = pd.read_csv(save_as, index_col=0)
-        clear_output
-        
+        texts = pd.read_csv(save_as, index_col=0)      
         print('Done!')
         return texts
     
@@ -437,17 +434,14 @@ def get_punctuated_text_df(article_list, save_as):
         # Reading in article texts:
         print("Reading in article text...")
         texts = get_text_df(article_list)
-        clear_output()
 
         # Punctuating the article texts:
         print("Inferring text punctuation...")
         texts['punctuated_text'] = texts.article_text.progress_apply(punctuate)
-        clear_output()
 
         # Saving, because this is really time-consuming
         print("Saving texts...")
         texts.to_csv(save_as)
-        clear_output()
 
         print('Done!')
         return texts
