@@ -132,27 +132,22 @@ def display_article(article, input_function):
     """
     global TOI_METADATA
 
-    # For some reason I don't quite understand,
-    # the pathlib solution fails here. It seems to be related to
-    # symlink resolution, but weirdly, using the symlink works,
-    # while avoiding the symlink fails.
-    #
-    # basepath = Path(__file__).parent.resolve()
-    # print('pathlib:\t', basepath)
+    # For some reason I don't quite understand, resolving the symlink
+    # causes the IFrame to fail to find the pdf files. Very strange.
+    # Particularly weirdly, using the symlink works,
+    # while avoiding the symlink fails. (I would have expected
+    # the opposite behavior)
 
-    basepath = Path(os.path.dirname(__file__))
+    basepath = Path(__file__).parent
 
-    # print('os:\t', basepath)
     if type(TOI_METADATA.at[article, 'pdf_file']) == str:
 
         pdf_file = TOI_METADATA.at[article, 'pdf_file']
         pdf_file = basepath / "temp" / pdf_file
 
-        abs_path = os.path.abspath(pdf_file)
         rel_path = os.path.relpath(pdf_file)
-        path = rel_path
 
-        display(IFrame(src=path, width='100%', height='700px'))
+        display(IFrame(src=rel_path, width='100%', height='700px'))
 
     else:
         print("No pdf file found in archive, displaying txt instead:")
