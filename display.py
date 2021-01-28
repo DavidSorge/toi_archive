@@ -3,9 +3,11 @@ from zipfile import ZipFile
 import subprocess
 import pandas as pd
 import regex as re
+import string
 from IPython.display import clear_output, IFrame, display
 from urllib.parse import quote
 from pathlib import Path
+from textwrap import wrap
 
 # tqdm import
 
@@ -138,7 +140,7 @@ def display_article(article, input_function):
     # while avoiding the symlink fails. (I would have expected
     # the opposite behavior)
 
-    basepath = Path(__file__).parent
+    basepath = Path(os.path.dirname(__file__))
 
     if type(TOI_METADATA.at[article, 'pdf_file']) == str:
 
@@ -396,14 +398,20 @@ def punctuate(text):
                   year      = {2016}
                   }
     """
+    text = text.translate(str.maketrans('', '', string.punctuation))
+    texts = wrap(text, 15000)
 
-    proc = subprocess.Popen(["curl",
-                             "-d",
-                             f"text={quote(text)}",
-                             "http://bark.phon.ioc.ee/punctuator"],
-                            stdout=subprocess.PIPE)
-    out = proc.communicate()[0]
-    return out.decode("utf-8")
+    punc_text = ""
+    for text in texts:
+        proc = subprocess.Popen(["curl",
+                                 "-d",
+                                 f"text={quote(text)}",
+                                 "http://bark.phon.ioc.ee/punctuator"],
+                                stdout=subprocess.PIPE)
+        out = proc.communicate()[0]
+        punc_text = punc_text + (out.decode("utf-8"))
+
+    return punc_text
 
 
 def get_text_df(request_list):
