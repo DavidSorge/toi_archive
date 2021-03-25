@@ -41,6 +41,12 @@ Arguments:
 
 * chunk_size: dtype = int. The number of articles to display in each chunk. After every chunk, the save_function will be implemented, and the program will prompt to continue or quit.
 
+Please note: this currently only works in browser-based jupyter notebooks because it depends on Iframe for PDF display.
+
 ### display_requested_articles in action:
 
 ![Screenshot of display_requested_articles in action](.images/display_requested_articles.png)
+
+### To Do List
+- [ ] Implement ImageMagick-based display option
+- [ ] Use isnotebook to autodetect whether to use Iframe or ImageMagick system

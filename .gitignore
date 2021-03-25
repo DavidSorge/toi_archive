@@ -1,6 +1,10 @@
-PDF/*
-TXT/*
+toi_archive/PDF/*
+toi_archive/TXT/*
 temp/*
 TOI_metadata.zip
 __pycache__/**
 __pycache__/toidisplay.cpython*
+toi_archive/__pycache__/__init__.cpython-37.pyc
+toi_archive/__pycache__/display.cpython-37.pyc
+toi_archive/.ipynb_checkpoints/**
+.ipynb_checkpoints/**
